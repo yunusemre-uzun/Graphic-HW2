@@ -27,59 +27,27 @@ using namespace std;
 */
 void Scene::forwardRenderingPipeline(Camera *camera)
 {
+	vector<Vec4> copied_vertices = copyVertices();
+	this->applyTransformationsToModels(copied_vertices);
 	Matrix4 cameraTransformationMatrix = this->CalculateCameraTransformationMatrix(camera);
-	this->applyCameraTransformationToVertices(cameraTransformationMatrix); // Transform vertices
-	this->applyCameraTransformationToCameras(cameraTransformationMatrix); // Transform cameras
-	this->applyTransformationsToModels();
+	this->applyCameraTransformationToVertices(copied_vertices, cameraTransformationMatrix); // Transform vertices
+	Matrix4 projection_matrix = createProjectionMatrix(camera);
+	this->applyProjectionMatrix(copied_vertices,projection_matrix);
 
 }
 
-Matrix4 Scene::CalculateCameraTransformationMatrix(Camera *camera)
+vector<Vec4> Scene::copyVertices()
 {
-	Matrix4 cameraTransformationMatrix = Matrix4();
-	cameraTransformationMatrix.val[0][0] = camera->u.x;
-	cameraTransformationMatrix.val[0][1] = camera->u.y;
-	cameraTransformationMatrix.val[0][2] = camera->u.z;
-	cameraTransformationMatrix.val[1][0] = camera->v.x;
-	cameraTransformationMatrix.val[1][1] = camera->v.y;
-	cameraTransformationMatrix.val[1][2] = camera->v.z;
-	cameraTransformationMatrix.val[2][0] = camera->w.x;
-	cameraTransformationMatrix.val[2][1] = camera->w.y;
-	cameraTransformationMatrix.val[2][2] = camera->w.z;
-	cameraTransformationMatrix.val[3][0] = 0;
-	cameraTransformationMatrix.val[3][1] = 0;
-	cameraTransformationMatrix.val[3][2] = 0;
-	cameraTransformationMatrix.val[0][3] = -1*(camera->u.x*camera->pos.x+camera->u.y*camera->pos.y+camera->u.z*camera->pos.z);
-	cameraTransformationMatrix.val[1][3] = -1*(camera->v.x*camera->pos.x+camera->v.y*camera->pos.y+camera->v.z*camera->pos.z);
-	cameraTransformationMatrix.val[2][3] = -1*(camera->w.x*camera->pos.x+camera->w.y*camera->pos.y+camera->w.z*camera->pos.z);
-	cameraTransformationMatrix.val[3][3] = 1;
-	return cameraTransformationMatrix;
-}
-
-void Scene::applyCameraTransformationToVertices(Matrix4 cameraTransformationMatrix)
-{
+	vector<Vec4> copied_vertices = vector<Vec4>();
 	for(int i=0;i<this->vertices.size();i++) {
-		Vec4 homogenous_coordinates = Vec4(this->vertices[i]->x,this->vertices[i]->y,this->vertices[i]->z,1,this->vertices[i]->colorId);
-		Vec4 camera_transformed_vertice = multiplyMatrixWithVec4(cameraTransformationMatrix,homogenous_coordinates);
-		this->vertices[i]->x = camera_transformed_vertice.x;
-		this->vertices[i]->y = camera_transformed_vertice.y;
-		this->vertices[i]->z = camera_transformed_vertice.z;
+		Vec3 *original_vertex = this->vertices[i];
+		Vec4 copied_vertex = Vec4(original_vertex->x,original_vertex->y,original_vertex->z,1,original_vertex->colorId);
+		copied_vertices.push_back(copied_vertex);
 	}
+	return copied_vertices;
 }
 
-// Note camera transformaion appllied to all cameras under the assumption a camera never visited twice
-void Scene::applyCameraTransformationToCameras(Matrix4 cameraTransformationMatrix)
-{
-	for(int i=0;i<this->cameras.size();i++) {
-		Vec4 homogenous_coordinates = Vec4(this->cameras[i]->pos.x,this->cameras[i]->pos.y,this->cameras[i]->pos.z,1,this->cameras[i]->pos.colorId);
-		Vec4 camera_transformed_vertice = multiplyMatrixWithVec4(cameraTransformationMatrix,homogenous_coordinates);
-		this->cameras[i]->pos.x = camera_transformed_vertice.x;
-		this->cameras[i]->pos.y = camera_transformed_vertice.y;
-		this->cameras[i]->pos.z = camera_transformed_vertice.z;
-	}
-}
-
-void Scene::applyTransformationsToModels(void)
+void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
 {
 	for(int model_iterator=0;model_iterator<this->models.size();model_iterator++) {
 		Model *model = this->models[model_iterator];
@@ -89,17 +57,17 @@ void Scene::applyTransformationsToModels(void)
 			case 't':
 				Translation *translation = this->translations[model->transformationIds[transformation_iterator]];
 				Matrix4 translation_matrix = this->createTranslationMatrix(translation->tx,translation->ty,translation->tz);
-				this->applyTransformationToModelsVertices(model, translation_matrix);
+				this->applyTransformationToModelsVertices(copied_vertices,model, translation_matrix);
 				break;
 			case 's':
 				Scaling *scaling = this->scalings[model->transformationIds[transformation_iterator]];
 				Matrix4 scaling_matrix = this->createScalingMatrix(scaling->sx,scaling->sy,scaling->sz);
-				this->applyTransformationToModelsVertices(model,scaling_matrix);
+				this->applyTransformationToModelsVertices(copied_vertices,model,scaling_matrix);
 				break;
 			case 'r':
 				Rotation *rotation = this->rotations[model->transformationIds[transformation_iterator]];
 				Matrix4 rotation_matrix = this->createRotationMatrix(rotation->angle,rotation->ux,rotation->uy,rotation->uz);
-				this->applyTransformationToModelsVertices(model,rotation_matrix);
+				this->applyTransformationToModelsVertices(copied_vertices,model,rotation_matrix);
 				break;
 			default:
 				break;
@@ -159,19 +127,78 @@ Matrix4 Scene::createRotationMatrix(double angle, double ux, double uy, double u
 	return rotation_matrix;
 }
 
-void Scene::applyTransformationToModelsVertices(Model* model, Matrix4 transformation_matrix)
+void Scene::applyTransformationToModelsVertices(vector<Vec4> &copied_vertices,Model* model, Matrix4 transformation_matrix)
 {
 	for(int triangle_iterator=0;triangle_iterator<model->numberOfTriangles;triangle_iterator++) {
 		for(int vertice=0;vertice<3;vertice++) {
 			int vertex_id = model->triangles[triangle_iterator].getFirstVertexId();
-			Vec3 *vertex = this->vertices[vertex_id];
-			Vec4 homogenous_coordinates = Vec4(vertex->x,vertex->y,vertex->z,1,vertex->colorId);
+			Vec4 homogenous_coordinates = copied_vertices[vertex_id];
 			Vec4 transformed_vertex = multiplyMatrixWithVec4(transformation_matrix, homogenous_coordinates);
-			vertex->x = transformed_vertex.x;
-			vertex->y = transformed_vertex.y;
-			vertex->z = transformed_vertex.z;
-			vertex->colorId = transformed_vertex.colorId;
+			copied_vertices[vertex_id] = transformed_vertex;
 		}
+	}
+}
+
+Matrix4 Scene::CalculateCameraTransformationMatrix(Camera *camera)
+{
+	Matrix4 cameraTransformationMatrix = Matrix4();
+	cameraTransformationMatrix.val[0][0] = camera->u.x;
+	cameraTransformationMatrix.val[0][1] = camera->u.y;
+	cameraTransformationMatrix.val[0][2] = camera->u.z;
+	cameraTransformationMatrix.val[1][0] = camera->v.x;
+	cameraTransformationMatrix.val[1][1] = camera->v.y;
+	cameraTransformationMatrix.val[1][2] = camera->v.z;
+	cameraTransformationMatrix.val[2][0] = camera->w.x;
+	cameraTransformationMatrix.val[2][1] = camera->w.y;
+	cameraTransformationMatrix.val[2][2] = camera->w.z;
+	cameraTransformationMatrix.val[3][0] = 0;
+	cameraTransformationMatrix.val[3][1] = 0;
+	cameraTransformationMatrix.val[3][2] = 0;
+	cameraTransformationMatrix.val[0][3] = -1*(camera->u.x*camera->pos.x+camera->u.y*camera->pos.y+camera->u.z*camera->pos.z);
+	cameraTransformationMatrix.val[1][3] = -1*(camera->v.x*camera->pos.x+camera->v.y*camera->pos.y+camera->v.z*camera->pos.z);
+	cameraTransformationMatrix.val[2][3] = -1*(camera->w.x*camera->pos.x+camera->w.y*camera->pos.y+camera->w.z*camera->pos.z);
+	cameraTransformationMatrix.val[3][3] = 1;
+	return cameraTransformationMatrix;
+}
+
+void Scene::applyCameraTransformationToVertices(vector<Vec4> &copied_vertices,Matrix4 cameraTransformationMatrix)
+{
+	for(int i=0;i<this->vertices.size();i++) {
+		Vec4 homogenous_coordinates = copied_vertices[i];
+		Vec4 camera_transformed_vertice = multiplyMatrixWithVec4(cameraTransformationMatrix,homogenous_coordinates);
+		copied_vertices[i] = camera_transformed_vertice;
+	}
+}
+
+
+Matrix4 Scene::createProjectionMatrix(Camera *camera)
+{
+	Matrix4 projection_matrix = Matrix4();
+	if(this->projectionType) { // Perspective projections
+		projection_matrix.val[0][0] = 2*camera->near/(camera->right-camera->left);
+		projection_matrix.val[0][2] = (camera->right+camera->left)/(camera->right-camera->left);
+		projection_matrix.val[1][1] = 2*camera->near/(camera->top-camera->bottom);
+		projection_matrix.val[1][2] = (camera->top+camera->bottom)/(camera->top-camera->bottom);
+		projection_matrix.val[2][2] = (camera->far+camera->near)/(camera->near-camera->far);
+		projection_matrix.val[2][3] = (2*camera->far*camera->near)/(camera->near-camera->far);
+		projection_matrix.val[3][2] = -1;
+	} else { // Ortographic projection
+		projection_matrix.val[0][0] = 2/(camera->right-camera->left);
+		projection_matrix.val[0][3] = (camera->right+camera->left)/(camera->left-camera->right);
+		projection_matrix.val[1][1] = 2/(camera->top-camera->bottom);
+		projection_matrix.val[1][3] = (camera->top+camera->bottom)/(camera->bottom-camera->top);
+		projection_matrix.val[2][2] = 2/(camera->near-camera->far);
+		projection_matrix.val[2][3] = (camera->far+camera->near)/(camera->near-camera->far);
+		projection_matrix.val[3][3] = 1;
+	}
+	return projection_matrix;
+}
+
+void Scene::applyProjectionMatrix(vector<Vec4> &copied_vertices,Matrix4 projection_matrix) {
+	for(int vertex_iterator=0;vertex_iterator<this->vertices.size();vertex_iterator++) {
+		Vec4 homogeneous_coordinates = copied_vertices[vertex_iterator];
+		Vec4 projected_vertex = multiplyMatrixWithVec4(projection_matrix,homogeneous_coordinates);
+		copied_vertices[vertex_iterator] = projected_vertex;
 	}
 }
 

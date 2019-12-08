@@ -46,14 +46,16 @@ public:
 	void convertPPMToPNG(string ppmFileName, int osType);
 
 	//Here starts our helper functions
-	Matrix4 CalculateCameraTransformationMatrix(Camera*);
-	void applyCameraTransformationToVertices(Matrix4);
-	void applyCameraTransformationToCameras(Matrix4);
-	void applyTransformationsToModels(void);
-	void applyTransformationToModelsVertices(Model*,Matrix4);
+	vector<Vec4> copyVertices(void);
+	void applyTransformationsToModels(vector<Vec4> &);
 	Matrix4 createTranslationMatrix(double tx,double ty,double tz);
 	Matrix4 createScalingMatrix(double sx, double sy, double sz);
 	Matrix4 createRotationMatrix(double angle, double ux, double uy, double uz);
+	void applyTransformationToModelsVertices(vector<Vec4> &,Model*,Matrix4);
+	Matrix4 CalculateCameraTransformationMatrix(Camera*);
+	void applyCameraTransformationToVertices(vector<Vec4> &,Matrix4);
+	Matrix4 createProjectionMatrix(Camera *);
+	void applyProjectionMatrix(vector<Vec4> &,Matrix4);
 };
 
 #endif
