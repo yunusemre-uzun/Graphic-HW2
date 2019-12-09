@@ -33,8 +33,24 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	this->applyProjectionMatrix(copied_vertices,projection_matrix);
 	vector<Line> lines = vector<Line>();
 	this->clip(copied_vertices, vertex_visibility, lines);
+	if(this->projectionType)
+		this->applyProjectionDivide(lines);
 	Matrix4 viewport_matrix = this->createViewportMatrix(camera);
 	this->applyViewportTransformation(lines, viewport_matrix);
+}
+
+void Scene::applyProjectionDivide(vector<Line> &lines)
+{
+	for(int i=0; i<lines.size();i++) {
+		lines[i].starting_point->x /= lines[i].starting_point->t;
+		lines[i].starting_point->y /= lines[i].starting_point->t;
+		lines[i].starting_point->z /= lines[i].starting_point->t;
+		lines[i].starting_point->t = 1;
+		lines[i].ending_point->x /= lines[i].ending_point->t;
+		lines[i].ending_point->y /= lines[i].ending_point->t;
+		lines[i].ending_point->z /= lines[i].ending_point->t;
+		lines[i].ending_point->t = 1;
+	}
 }
 
 vector<Vec4> Scene::copyVertices(vector<bool> &vertex_visibility)
@@ -259,12 +275,12 @@ void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility,
 					Line *line = new Line;
 					if(tl<1) {
 						end_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,1,lines[k].ending_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,lines[k].ending_point->t,lines[k].ending_point->colorId);
 						line->ending_point = new_vertice;
 					}
 					if(te > 0) {
 						start_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,1,lines[k].starting_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,lines[k].starting_point->t,lines[k].starting_point->colorId);
 						line->starting_point = new_vertice;
 					}
 					if(end_flag) {

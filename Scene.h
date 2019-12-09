@@ -66,6 +66,7 @@ public:
 	Matrix4 createViewportMatrix(Camera *camera);
 	void applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix);
 	void createLines(vector<Line> &lines,vector<Vec4> &copied_vertices);
+	void applyProjectionDivide(vector<Line>&);
 };
 
 #endif
