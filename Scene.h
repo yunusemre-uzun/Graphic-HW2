@@ -46,7 +46,7 @@ public:
 	void convertPPMToPNG(string ppmFileName, int osType);
 
 	//Here starts our helper functions
-	vector<Vec4> copyVertices(void);
+	vector<Vec4> copyVertices(vector<bool> &vertex_visibility);
 	void applyTransformationsToModels(vector<Vec4> &);
 	Matrix4 createTranslationMatrix(double tx,double ty,double tz);
 	Matrix4 createScalingMatrix(double sx, double sy, double sz);
@@ -56,6 +56,10 @@ public:
 	void applyCameraTransformationToVertices(vector<Vec4> &,Matrix4);
 	Matrix4 createProjectionMatrix(Camera *);
 	void applyProjectionMatrix(vector<Vec4> &,Matrix4);
+	bool isVisible(int den, int num, double &te, double &tl);
+	void cull(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &lines);
+	Matrix4 createViewportMatrix(Camera *camera);
+	void applyViewportTransformation(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, Matrix4 viewport_matrix);
 };
 
 #endif

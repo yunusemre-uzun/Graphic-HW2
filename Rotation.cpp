@@ -10,9 +10,9 @@ Rotation::Rotation(int rotationId, double angle, double x, double y, double z)
 {
     this->rotationId = rotationId;
     this->angle = angle;
-    this->ux = ux;
-    this->uy = uy;
-    this->uz = uz;
+    this->ux = x;
+    this->uy = y;
+    this->uz = z;
 }
 
 ostream &operator<<(ostream &os, const Rotation &r)
