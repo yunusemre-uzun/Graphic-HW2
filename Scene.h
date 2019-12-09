@@ -21,6 +21,11 @@
 
 using namespace std;
 
+typedef struct Line {
+	Vec4 *starting_point;
+	Vec4 *ending_point;
+};
+
 class Scene
 {
 public:
@@ -59,7 +64,8 @@ public:
 	bool isVisible(int den, int num, double &te, double &tl);
 	void cull(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &lines);
 	Matrix4 createViewportMatrix(Camera *camera);
-	void applyViewportTransformation(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, Matrix4 viewport_matrix);
+	void applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix);
+	void createLines(vector<Line> &lines,vector<Vec4> &copied_vertices);
 };
 
 #endif

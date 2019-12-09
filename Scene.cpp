@@ -21,11 +21,6 @@
 using namespace tinyxml2;
 using namespace std;
 
-typedef struct Line {
-	Vec4 starting_point;
-	Vec4 ending_point;
-	bool isVisible;
-};
 
 /*
 	Transformations, clipping, culling, rasterization are done here.
@@ -41,9 +36,13 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	Matrix4 projection_matrix = createProjectionMatrix(camera);
 	this->applyProjectionMatrix(copied_vertices,projection_matrix);
 	vector<Line> lines = vector<Line>();
-	this->cull(copied_vertices, vertex_visibility, lines);
+	if(this->cullingEnabled)
+		this->cull(copied_vertices, vertex_visibility, lines);
+	else
+		this->createLines(lines,copied_vertices);
+	
 	Matrix4 viewport_matrix = this->createViewportMatrix(camera);
-	this->applyViewportTransformation(copied_vertices, vertex_visibility, viewport_matrix);
+	this->applyViewportTransformation(lines, viewport_matrix);
 }
 
 vector<Vec4> Scene::copyVertices(vector<bool> &vertex_visibility)
@@ -231,71 +230,65 @@ void Scene::applyProjectionMatrix(vector<Vec4> &copied_vertices,Matrix4 projecti
 	}
 }
 
-void Scene::cull(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &lines) {
+void Scene::cull(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &linesVector) {
 	for(int i=0; i<this->models.size(); i++) {
 		Model *model = this->models[i];
 		for(int j=0; j<model->numberOfTriangles; j++) {
 			Triangle *triangle = &(model->triangles[j]);
-			Line line_12 = {copied_vertices[triangle->getFirstVertexId()], copied_vertices[triangle->getSecondVertexId()], false};
-			Line line_13 = {copied_vertices[triangle->getFirstVertexId()], copied_vertices[triangle->getThirdVertexId()], false};
-			Line line_23 = {copied_vertices[triangle->getSecondVertexId()], copied_vertices[triangle->getThirdVertexId()], false};
-			Line lines[3] = {line_12, line_13, line_23};
+			Line line_12 = {&copied_vertices[triangle->getFirstVertexId()], &copied_vertices[triangle->getSecondVertexId()]};
+			Line line_31 = {&copied_vertices[triangle->getThirdVertexId()], &copied_vertices[triangle->getFirstVertexId()]};
+			Line line_23 = {&copied_vertices[triangle->getSecondVertexId()], &copied_vertices[triangle->getThirdVertexId()]};
+			Line lines[3] = {line_12, line_31, line_23};
 			for(int k=0; k<3; k++) {
 				double te = 0;
 				double tl = 1;
 				bool visible = false;
-				double dx = lines[k].ending_point.x - lines[k].starting_point.x;
-				double dy = lines[k].ending_point.y - lines[k].starting_point.y;
-				double dz = lines[k].ending_point.z - lines[k].starting_point.z;
-				if(isVisible(dx, -1 - lines[k].starting_point.x, te, tl)
-					&& isVisible(-1 * dx, lines[k].starting_point.x - 1, te, tl)
-					&& isVisible(dy, -1 - lines[k].starting_point.y, te, tl)
-					&& isVisible(-1 * dy, lines[k].starting_point.y - 1, te, tl)
-					&& isVisible(dz, -1 - lines[k].starting_point.z, te, tl)
-					&& isVisible(-1 * dz, lines[k].starting_point.z - 1, te, tl))
+				double dx = lines[k].ending_point->x - lines[k].starting_point->x;
+				double dy = lines[k].ending_point->y - lines[k].starting_point->y;
+				double dz = lines[k].ending_point->z - lines[k].starting_point->z;
+				if(isVisible(dx, -1 - lines[k].starting_point->x, te, tl)
+					&& isVisible(-1 * dx, lines[k].starting_point->x - 1, te, tl)
+					&& isVisible(dy, -1 - lines[k].starting_point->y, te, tl)
+					&& isVisible(-1 * dy, lines[k].starting_point->y - 1, te, tl)
+					&& isVisible(dz, -1 - lines[k].starting_point->z, te, tl)
+					&& isVisible(-1 * dz, lines[k].starting_point->z - 1, te, tl))
 				{
 					visible = true;
 					bool start_flag = true;
 					bool end_flag = true;
+					Line *line = new Line;
 					if(tl<1) {
 						end_flag = false;
-						Vec3 *new_vertice = new Vec3(lines[k].starting_point.x + dx*tl, lines[k].starting_point.y + dy*tl,lines[k].starting_point.z + dz*tl,lines[k].ending_point.colorId);
-						this->vertices.push_back(new_vertice);
-						vertex_visibility.push_back(true);
-						if(k==0) {
-							triangle->setSecondVertexId(this->vertices.size()-1);
-						}
-						else {
-							triangle->setThirdVertexId(this->vertices.size()-1);
-						}
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,1,lines[k].ending_point->colorId);
+						line->ending_point = new_vertice;
 					}
 					if(te > 0) {
 						start_flag = false;
-						Vec3 *new_vertice = new Vec3(lines[k].starting_point.x + dx*te, lines[k].starting_point.y + dy*te,lines[k].starting_point.z + dz*te,lines[k].starting_point.colorId);
-						this->vertices.push_back(new_vertice);
-						vertex_visibility.push_back(true);
-						if(k==2) {
-							triangle->setSecondVertexId(this->vertices.size()-1);
-						}
-						else {
-							triangle->setFirstVertexId(this->vertices.size()-1);
-						}
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,1,lines[k].starting_point->colorId);
+						line->starting_point = new_vertice;
 					}
 					if(end_flag) {
 						if(k==0) {
-							vertex_visibility[triangle->getSecondVertexId()] = true;
-						} else {
-							vertex_visibility[triangle->getThirdVertexId()] = true;
+							line->ending_point = &(copied_vertices[triangle->getSecondVertexId()]);
+						} else if(k==1) {
+							line->ending_point = &(copied_vertices[triangle->getFirstVertexId()]);
+						} 
+						else {
+							line->ending_point = &(copied_vertices[triangle->getThirdVertexId()]);
 						}
 					}
 					if(start_flag) {
 						if(k==2) {
-							vertex_visibility[triangle->getSecondVertexId()] = true;
-						} else {
-							vertex_visibility[triangle->getFirstVertexId()] = true;
+							line->starting_point = &(copied_vertices[triangle->getSecondVertexId()]);
+						} else if(k==1) {
+							line->starting_point = &(copied_vertices[triangle->getThirdVertexId()]);
+						} 
+						else {
+							line->starting_point = &(copied_vertices[triangle->getFirstVertexId()]);
 						}
 					}
 
+					linesVector.push_back(*line);
 				}
 			}
 		}
@@ -326,11 +319,36 @@ bool Scene::isVisible(int den, int num, double &te, double &tl) {
 	return true;
 }
 
-void Scene::applyViewportTransformation(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, Matrix4 viewport_matrix) {
-	for(int i=0; i<copied_vertices.size(); i++) {
-		if(vertex_visibility[i]) {
-			copied_vertices[i] = multiplyMatrixWithVec4(viewport_matrix, copied_vertices[i]);
+void Scene::applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix) {
+	for(int i=0; i<lines.size(); i++) {
+		Vec4 *temp = new Vec4(multiplyMatrixWithVec4(viewport_matrix, *lines[i].starting_point));
+		delete lines[i].starting_point;
+		lines[i].starting_point = temp;
+		Vec4 *temp2 = new Vec4(multiplyMatrixWithVec4(viewport_matrix, *lines[i].ending_point));
+		delete lines[i].ending_point;
+		lines[i].ending_point = temp2;
+	}
+}
+
+void Scene::createLines(vector<Line> &lines,vector<Vec4> &copied_vertices) {
+	for(int i=0;i<this->models.size();i++) {
+		Model *model = this->models[i];
+		for(int j=0;j<model->numberOfTriangles;j++) {
+			Triangle triangle = model->triangles[j];
+			Line *line_12 = new Line;
+			Line *line_23 = new Line;
+			Line *line_31 = new Line;
+			line_12->starting_point =  &(copied_vertices[triangle.getFirstVertexId()]);
+			line_12->ending_point = &(copied_vertices[triangle.getSecondVertexId()]);
+			line_23->starting_point =  &(copied_vertices[triangle.getSecondVertexId()]);
+			line_23->ending_point = &(copied_vertices[triangle.getThirdVertexId()]);
+			line_31->starting_point =  &(copied_vertices[triangle.getThirdVertexId()]);
+			line_31->ending_point = &(copied_vertices[triangle.getFirstVertexId()]);
+			lines.push_back(*line_12);
+			lines.push_back(*line_23);
+			lines.push_back(*line_31);
 		}
+
 	}
 }
 
