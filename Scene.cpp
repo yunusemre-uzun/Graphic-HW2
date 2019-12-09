@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <cmath>
+#include <vector>
 
 #include "Scene.h"
 #include "Camera.h"
@@ -15,17 +16,340 @@
 #include "Vec3.h"
 #include "tinyxml2.h"
 #include "Helpers.h"
+#include "Vec4.h"
+#include "Matrix4.h"
 
 using namespace tinyxml2;
 using namespace std;
 
-/*
-	Transformations, clipping, culling, rasterization are done here.
-	You can define helper functions inside Scene class implementation.
-*/
 void Scene::forwardRenderingPipeline(Camera *camera)
 {
-	// TODO: Implement this function.
+	vector<bool> vertex_visibility = vector<bool>();
+	vector<Vec4> copied_vertices = copyVertices(vertex_visibility);
+	this->applyTransformationsToModels(copied_vertices);
+	Matrix4 cameraTransformationMatrix = this->CalculateCameraTransformationMatrix(camera);
+	this->applyCameraTransformationToVertices(copied_vertices, cameraTransformationMatrix); // Transform vertices
+	Matrix4 projection_matrix = createProjectionMatrix(camera);
+	this->applyProjectionMatrix(copied_vertices,projection_matrix);
+	vector<Line> lines = vector<Line>();
+	this->clip(copied_vertices, vertex_visibility, lines);
+	Matrix4 viewport_matrix = this->createViewportMatrix(camera);
+	this->applyViewportTransformation(lines, viewport_matrix);
+}
+
+vector<Vec4> Scene::copyVertices(vector<bool> &vertex_visibility)
+{
+	vector<Vec4> copied_vertices = vector<Vec4>();
+	for(int i=0;i<this->vertices.size();i++) {
+		Vec3 *original_vertex = this->vertices[i];
+		Vec4 *copied_vertex = new Vec4(original_vertex->x,original_vertex->y,original_vertex->z,1,original_vertex->colorId);
+		copied_vertices.push_back(*copied_vertex);
+		vertex_visibility.push_back(false);
+	}
+	return copied_vertices;
+}
+
+void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
+{
+	for(int model_iterator=0;model_iterator<this->models.size();model_iterator++) {
+		Model *model = this->models[model_iterator];
+		for(int transformation_iterator=0;transformation_iterator<model->numberOfTransformations;transformation_iterator++) {
+			switch (model->transformationTypes[transformation_iterator])
+			{
+			case 't':
+				{
+				Translation *translation = this->translations[model->transformationIds[transformation_iterator]-1];
+				Matrix4 translation_matrix = this->createTranslationMatrix(translation->tx,translation->ty,translation->tz);
+				this->applyTransformationToModelsVertices(copied_vertices,model, translation_matrix);
+				break;
+				}
+			case 's':
+				{
+				Scaling *scaling = this->scalings[model->transformationIds[transformation_iterator]-1];
+				Matrix4 scaling_matrix = this->createScalingMatrix(scaling->sx,scaling->sy,scaling->sz);
+				this->applyTransformationToModelsVertices(copied_vertices,model,scaling_matrix);
+				break;
+				}
+			case 'r':
+				{
+				Rotation *rotation = this->rotations[model->transformationIds[transformation_iterator]-1];
+				Matrix4 rotation_matrix = this->createRotationMatrix(rotation->angle,rotation->ux,rotation->uy,rotation->uz);
+				this->applyTransformationToModelsVertices(copied_vertices,model,rotation_matrix);
+				break;
+				}
+			default:
+				break;
+			}
+		}
+	}
+	return;
+}
+
+Matrix4 Scene::createScalingMatrix(double sx, double sy, double sz)
+{
+	Matrix4 scaling_matrix = Matrix4();
+	scaling_matrix.val[0][0] = sx;
+	scaling_matrix.val[1][1] = sy;
+	scaling_matrix.val[2][2] = sz;
+	scaling_matrix.val[3][3] = 1;
+	return scaling_matrix;
+}
+
+Matrix4 Scene::createTranslationMatrix(double tx, double ty, double tz)
+{
+	Matrix4 translation_matrix = Matrix4();
+	translation_matrix.val[0][0] = 1;
+	translation_matrix.val[1][1] = 1;
+	translation_matrix.val[2][2] = 1;
+	translation_matrix.val[3][3] = 1;
+	translation_matrix.val[0][3] = tx;
+	translation_matrix.val[1][3] = ty;
+	translation_matrix.val[2][3] = tz;
+	return translation_matrix;
+}
+
+Matrix4 Scene::createRotationMatrix(double angle, double ux, double uy, double uz)
+{
+	Vec3 u = Vec3(ux,uy,ux,0);
+	Vec3 v = normalizeVec3(Vec3(-1*uy,ux,0,0));
+	Vec3 w = normalizeVec3(crossProductVec3(u,v));
+	Matrix4 m = Matrix4();
+	Matrix4 m_inverse = Matrix4();
+	m.val[0][0] = m_inverse.val[0][0] =ux;
+	m.val[1][0] = m_inverse.val[0][1] =uy;
+	m.val[2][0] = m_inverse.val[0][2] =uz;
+	m.val[0][1] = m_inverse.val[1][0] =v.x;
+	m.val[1][1] = m_inverse.val[1][1] =v.y;
+	m.val[2][1] = m_inverse.val[1][2] =v.z;
+	m.val[0][2] = m_inverse.val[2][0] =w.x;
+	m.val[1][2] = m_inverse.val[2][1] =w.y;
+	m.val[2][2] = m_inverse.val[2][2] =w.z;
+	Matrix4 rotate_x = Matrix4();
+	rotate_x.val[0][0] = 1; 
+	rotate_x.val[1][1] = cos(angle);
+	rotate_x.val[1][2] = -1*sin(angle);
+	rotate_x.val[2][1] = sin(angle);
+	rotate_x.val[2][2] = cos(angle);
+	rotate_x.val[3][3] = 1;     
+	Matrix4 rotation_matrix = multiplyMatrixWithMatrix(m_inverse,multiplyMatrixWithMatrix(rotate_x,m));
+	return rotation_matrix;
+}
+
+Matrix4 Scene::createViewportMatrix(Camera *camera) {
+	Matrix4 viewport_matrix = Matrix4();
+	viewport_matrix.val[0][0] = (camera->horRes)/2.0;
+	viewport_matrix.val[0][3] = ((camera->horRes)-1)/2.0;
+	viewport_matrix.val[1][1] = (camera->verRes)/2.0;
+	viewport_matrix.val[1][3] = ((camera->verRes)-1)/2.0;
+	viewport_matrix.val[2][2] = 0.5;
+	viewport_matrix.val[2][3] = 0.5;
+	viewport_matrix.val[3][3] = 1;
+	return viewport_matrix;
+}
+
+void Scene::applyTransformationToModelsVertices(vector<Vec4> &copied_vertices,Model* model, Matrix4 transformation_matrix)
+{
+	for(int triangle_iterator=0;triangle_iterator<model->numberOfTriangles;triangle_iterator++) {
+		for(int vertice=0;vertice<3;vertice++) {
+			int vertex_id = model->triangles[triangle_iterator].vertexIds[vertice];
+			Vec4 homogenous_coordinates = copied_vertices[vertex_id-1];
+			Vec4 transformed_vertex = multiplyMatrixWithVec4(transformation_matrix, homogenous_coordinates);
+			copied_vertices[vertex_id-1] = transformed_vertex;
+		}
+	}
+}
+
+Matrix4 Scene::CalculateCameraTransformationMatrix(Camera *camera)
+{
+	Matrix4 cameraTransformationMatrix = Matrix4();
+	cameraTransformationMatrix.val[0][0] = camera->u.x;
+	cameraTransformationMatrix.val[0][1] = camera->u.y;
+	cameraTransformationMatrix.val[0][2] = camera->u.z;
+	cameraTransformationMatrix.val[1][0] = camera->v.x;
+	cameraTransformationMatrix.val[1][1] = camera->v.y;
+	cameraTransformationMatrix.val[1][2] = camera->v.z;
+	cameraTransformationMatrix.val[2][0] = camera->w.x;
+	cameraTransformationMatrix.val[2][1] = camera->w.y;
+	cameraTransformationMatrix.val[2][2] = camera->w.z;
+	cameraTransformationMatrix.val[3][0] = 0;
+	cameraTransformationMatrix.val[3][1] = 0;
+	cameraTransformationMatrix.val[3][2] = 0;
+	cameraTransformationMatrix.val[0][3] = -1*(camera->u.x*camera->pos.x+camera->u.y*camera->pos.y+camera->u.z*camera->pos.z);
+	cameraTransformationMatrix.val[1][3] = -1*(camera->v.x*camera->pos.x+camera->v.y*camera->pos.y+camera->v.z*camera->pos.z);
+	cameraTransformationMatrix.val[2][3] = -1*(camera->w.x*camera->pos.x+camera->w.y*camera->pos.y+camera->w.z*camera->pos.z);
+	cameraTransformationMatrix.val[3][3] = 1;
+	return cameraTransformationMatrix;
+}
+
+void Scene::applyCameraTransformationToVertices(vector<Vec4> &copied_vertices,Matrix4 cameraTransformationMatrix)
+{
+	for(int i=0;i<this->vertices.size();i++) {
+		Vec4 homogenous_coordinates = copied_vertices[i];
+		Vec4 camera_transformed_vertice = multiplyMatrixWithVec4(cameraTransformationMatrix,homogenous_coordinates);
+		copied_vertices[i] = camera_transformed_vertice;
+	}
+}
+
+
+Matrix4 Scene::createProjectionMatrix(Camera *camera)
+{
+	Matrix4 projection_matrix = Matrix4();
+	if(this->projectionType) { // Perspective projections
+		projection_matrix.val[0][0] = 2*camera->near/(camera->right-camera->left);
+		projection_matrix.val[0][2] = (camera->right+camera->left)/(camera->right-camera->left);
+		projection_matrix.val[1][1] = 2*camera->near/(camera->top-camera->bottom);
+		projection_matrix.val[1][2] = (camera->top+camera->bottom)/(camera->top-camera->bottom);
+		projection_matrix.val[2][2] = (camera->far+camera->near)/(camera->near-camera->far);
+		projection_matrix.val[2][3] = (2*camera->far*camera->near)/(camera->near-camera->far);
+		projection_matrix.val[3][2] = -1;
+	} else { // Ortographic projection
+		projection_matrix.val[0][0] = 2/(camera->right-camera->left);
+		projection_matrix.val[0][3] = (camera->right+camera->left)/(camera->left-camera->right);
+		projection_matrix.val[1][1] = 2/(camera->top-camera->bottom);
+		projection_matrix.val[1][3] = (camera->top+camera->bottom)/(camera->bottom-camera->top);
+		projection_matrix.val[2][2] = 2/(camera->near-camera->far);
+		projection_matrix.val[2][3] = (camera->far+camera->near)/(camera->near-camera->far);
+		projection_matrix.val[3][3] = 1;
+	}
+	return projection_matrix;
+}
+
+void Scene::applyProjectionMatrix(vector<Vec4> &copied_vertices,Matrix4 projection_matrix) {
+	for(int vertex_iterator=0;vertex_iterator<this->vertices.size();vertex_iterator++) {
+		Vec4 homogeneous_coordinates = copied_vertices[vertex_iterator];
+		Vec4 projected_vertex = multiplyMatrixWithVec4(projection_matrix,homogeneous_coordinates);
+		copied_vertices[vertex_iterator] = projected_vertex;
+	}
+}
+
+void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &linesVector) {
+	for(int i=0; i<this->models.size(); i++) {
+		Model *model = this->models[i];
+		for(int j=0; j<model->numberOfTriangles; j++) {
+			Triangle *triangle = &(model->triangles[j]);
+			Line line_12 = {&copied_vertices[triangle->getFirstVertexId()-1], &copied_vertices[triangle->getSecondVertexId()-1]};
+			Line line_31 = {&copied_vertices[triangle->getThirdVertexId()-1], &copied_vertices[triangle->getFirstVertexId()-1]};
+			Line line_23 = {&copied_vertices[triangle->getSecondVertexId()-1], &copied_vertices[triangle->getThirdVertexId()-1]};
+			Line lines[3] = {line_12, line_31, line_23};
+			for(int k=0; k<3; k++) {
+				double te = 0;
+				double tl = 1;
+				bool visible = false;
+				double dx = lines[k].ending_point->x - lines[k].starting_point->x;
+				double dy = lines[k].ending_point->y - lines[k].starting_point->y;
+				double dz = lines[k].ending_point->z - lines[k].starting_point->z;
+				double wmin = lines[k].starting_point->t;
+				double wmax = -1 * lines[k].starting_point->t;
+				// case check for negative w
+				if (wmin > wmax) {
+					double temp = wmin;
+					wmin = wmax;
+					wmax = temp;
+				}
+				if(isVisible(dx, wmin - lines[k].starting_point->x, te, tl)
+					&& isVisible(-1 * dx, lines[k].starting_point->x - wmax, te, tl)
+					&& isVisible(dy, wmin - lines[k].starting_point->y, te, tl)
+					&& isVisible(-1 * dy, lines[k].starting_point->y - wmax, te, tl)
+					&& isVisible(dz, wmin - lines[k].starting_point->z, te, tl)
+					&& isVisible(-1 * dz, lines[k].starting_point->z - wmax, te, tl))
+				{
+					visible = true;
+					bool start_flag = true;
+					bool end_flag = true;
+					Line *line = new Line;
+					if(tl<1) {
+						end_flag = false;
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,1,lines[k].ending_point->colorId);
+						line->ending_point = new_vertice;
+					}
+					if(te > 0) {
+						start_flag = false;
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,1,lines[k].starting_point->colorId);
+						line->starting_point = new_vertice;
+					}
+					if(end_flag) {
+						if(k==0) {
+							line->ending_point = &(copied_vertices[triangle->getSecondVertexId()-1]);
+						} else if(k==1) {
+							line->ending_point = &(copied_vertices[triangle->getFirstVertexId()-1]);
+						} 
+						else {
+							line->ending_point = &(copied_vertices[triangle->getThirdVertexId()-1]);
+						}
+					}
+					if(start_flag) {
+						if(k==2) {
+							line->starting_point = &(copied_vertices[triangle->getSecondVertexId()-1]);
+						} else if(k==1) {
+							line->starting_point = &(copied_vertices[triangle->getThirdVertexId()-1]);
+						} 
+						else {
+							line->starting_point = &(copied_vertices[triangle->getFirstVertexId()-1]);
+						}
+					}
+
+					linesVector.push_back(*line);
+				}
+			}
+		}
+	}
+}
+
+bool Scene::isVisible(int den, int num, double &te, double &tl) {
+	double t = 0;
+	if(den>0) {
+		t = num / (double)den;
+		if(t>tl) {
+			return false;
+		}
+		if(t>te) {
+			te = t;
+		}
+	} else if (den<0) {
+		t = num / (double)den;
+		if(t<te) {
+			return false;
+		}
+		if(t<tl) {
+			tl = t;
+		}
+	} else if (num>0) {
+		return false;
+	}
+	return true;
+}
+
+void Scene::applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix) {
+	for(int i=0; i<lines.size(); i++) {
+		Vec4 *temp = new Vec4(multiplyMatrixWithVec4(viewport_matrix, *lines[i].starting_point));
+		//delete lines[i].starting_point;
+		lines[i].starting_point = temp;
+		Vec4 *temp2 = new Vec4(multiplyMatrixWithVec4(viewport_matrix, *lines[i].ending_point));
+		//delete lines[i].ending_point;
+		lines[i].ending_point = temp2;
+	}
+}
+
+void Scene::createLines(vector<Line> &lines,vector<Vec4> &copied_vertices) {
+	for(int i=0;i<this->models.size();i++) {
+		Model *model = this->models[i];
+		for(int j=0;j<model->numberOfTriangles;j++) {
+			Triangle triangle = model->triangles[j];
+			Line *line_12 = new Line;
+			Line *line_23 = new Line;
+			Line *line_31 = new Line;
+			line_12->starting_point =  &(copied_vertices[triangle.getFirstVertexId()-1]);
+			line_12->ending_point = &(copied_vertices[triangle.getSecondVertexId()-1]);
+			line_23->starting_point =  &(copied_vertices[triangle.getSecondVertexId()-1]);
+			line_23->ending_point = &(copied_vertices[triangle.getThirdVertexId()-1]);
+			line_31->starting_point =  &(copied_vertices[triangle.getThirdVertexId()-1]);
+			line_31->ending_point = &(copied_vertices[triangle.getFirstVertexId()-1]);
+			lines.push_back(*line_12);
+			lines.push_back(*line_23);
+			lines.push_back(*line_31);
+		}
+
+	}
 }
 
 /*
