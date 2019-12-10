@@ -209,7 +209,7 @@ Color Scene::addColor(Color color1, Color color2) {
 	double result_color_red = color1.r + color2.r;
 	double result_color_green = color1.g + color2.g;
 	double result_color_blue = color1.b + color2.b;
-	return Color(result_color_red,result_color_green,result_color_blue);
+	return Color(round(result_color_red),round(result_color_green),round(result_color_blue));
 }
 
 
