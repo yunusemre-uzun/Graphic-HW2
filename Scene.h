@@ -65,8 +65,11 @@ public:
 	void clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &lines);
 	Matrix4 createViewportMatrix(Camera *camera);
 	void applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix);
+	void applyViewportTransformation(vector<Vec4> &copied_vertices, Matrix4 viewport_matrix, Camera* camera);
 	void createLines(vector<Line> &lines,vector<Vec4> &copied_vertices);
-	void applyProjectionDivide(vector<Line>&);
+	void applyProjectionDivide(vector<Line> &lines);
+	void applyProjectionDivide(vector<Vec4> &copied_vertices);
+	Vec3 calculateVectorV(Vec3 u);
 };
 
 #endif

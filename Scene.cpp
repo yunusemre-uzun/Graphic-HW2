@@ -31,12 +31,18 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	this->applyCameraTransformationToVertices(copied_vertices, cameraTransformationMatrix); // Transform vertices
 	Matrix4 projection_matrix = createProjectionMatrix(camera);
 	this->applyProjectionMatrix(copied_vertices,projection_matrix);
-	vector<Line> lines = vector<Line>();
-	this->clip(copied_vertices, vertex_visibility, lines);
-	if(this->projectionType)
-		this->applyProjectionDivide(lines);
+	//vector<Line> lines = vector<Line>();
+	//this->clip(copied_vertices, vertex_visibility, lines);
+	// in HERE, we NEED TO DO BACKFACE CULLING (if enabled)
+	if(this->projectionType) {
+		//this->applyProjectionDivide(lines);
+		this->applyProjectionDivide(copied_vertices);
+	}
 	Matrix4 viewport_matrix = this->createViewportMatrix(camera);
-	this->applyViewportTransformation(lines, viewport_matrix);
+	//this->applyViewportTransformation(lines, viewport_matrix);
+	this->applyViewportTransformation(copied_vertices, viewport_matrix, camera);
+	// From now on, we work on integer domain.
+	return;
 }
 
 void Scene::applyProjectionDivide(vector<Line> &lines)
@@ -50,6 +56,15 @@ void Scene::applyProjectionDivide(vector<Line> &lines)
 		lines[i].ending_point->y /= lines[i].ending_point->t;
 		lines[i].ending_point->z /= lines[i].ending_point->t;
 		lines[i].ending_point->t = 1;
+	}
+}
+
+void Scene::applyProjectionDivide(vector<Vec4> &copied_vertices) {
+	for(int i=0; i<copied_vertices.size(); i++) {
+		copied_vertices[i].x /= copied_vertices[i].t;
+		copied_vertices[i].y /= copied_vertices[i].t;
+		copied_vertices[i].z /= copied_vertices[i].t;
+		copied_vertices[i].t = 1;
 	}
 }
 
@@ -67,6 +82,7 @@ vector<Vec4> Scene::copyVertices(vector<bool> &vertex_visibility)
 
 void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
 {
+	int rotation_count = 0;
 	for(int model_iterator=0;model_iterator<this->models.size();model_iterator++) {
 		Model *model = this->models[model_iterator];
 		for(int transformation_iterator=0;transformation_iterator<model->numberOfTransformations;transformation_iterator++) {
@@ -91,12 +107,14 @@ void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
 				Rotation *rotation = this->rotations[model->transformationIds[transformation_iterator]-1];
 				Matrix4 rotation_matrix = this->createRotationMatrix(rotation->angle,rotation->ux,rotation->uy,rotation->uz);
 				this->applyTransformationToModelsVertices(copied_vertices,model,rotation_matrix);
+				rotation_count++;
 				break;
 				}
 			default:
 				break;
 			}
 		}
+		printf("Done %d rotations", rotation_count);
 	}
 	return;
 }
@@ -126,20 +144,24 @@ Matrix4 Scene::createTranslationMatrix(double tx, double ty, double tz)
 
 Matrix4 Scene::createRotationMatrix(double angle, double ux, double uy, double uz)
 {
-	Vec3 u = Vec3(ux,uy,ux,0);
-	Vec3 v = normalizeVec3(Vec3(-1*uy,ux,0,0));
+	Vec3 u = Vec3(ux,uy,uz,0);
+	u = normalizeVec3(u);
+	//Vec3 v = normalizeVec3(Vec3(-1*uy,ux,0,0));
+	Vec3 v = calculateVectorV(u); // this returns normalized v
 	Vec3 w = normalizeVec3(crossProductVec3(u,v));
+	angle = (angle * M_PI) / 180;
 	Matrix4 m = Matrix4();
 	Matrix4 m_inverse = Matrix4();
-	m.val[0][0] = m_inverse.val[0][0] =ux;
-	m.val[1][0] = m_inverse.val[0][1] =uy;
-	m.val[2][0] = m_inverse.val[0][2] =uz;
-	m.val[0][1] = m_inverse.val[1][0] =v.x;
-	m.val[1][1] = m_inverse.val[1][1] =v.y;
-	m.val[2][1] = m_inverse.val[1][2] =v.z;
-	m.val[0][2] = m_inverse.val[2][0] =w.x;
-	m.val[1][2] = m_inverse.val[2][1] =w.y;
-	m.val[2][2] = m_inverse.val[2][2] =w.z;
+	m_inverse.val[0][0] = m.val[0][0] =u.x;
+	m_inverse.val[1][0] = m.val[0][1] =u.y;
+	m_inverse.val[2][0] = m.val[0][2] =u.z;
+	m_inverse.val[0][1] = m.val[1][0] =v.x;
+	m_inverse.val[1][1] = m.val[1][1] =v.y;
+	m_inverse.val[2][1] = m.val[1][2] =v.z;
+	m_inverse.val[0][2] = m.val[2][0] =w.x;
+	m_inverse.val[1][2] = m.val[2][1] =w.y;
+	m_inverse.val[2][2] = m.val[2][2] =w.z;
+	m_inverse.val[3][3] = m.val[3][3] = 1;
 	Matrix4 rotate_x = Matrix4();
 	rotate_x.val[0][0] = 1; 
 	rotate_x.val[1][1] = cos(angle);
@@ -149,6 +171,26 @@ Matrix4 Scene::createRotationMatrix(double angle, double ux, double uy, double u
 	rotate_x.val[3][3] = 1;     
 	Matrix4 rotation_matrix = multiplyMatrixWithMatrix(m_inverse,multiplyMatrixWithMatrix(rotate_x,m));
 	return rotation_matrix;
+}
+
+Vec3 Scene::calculateVectorV(Vec3 u) {
+	Vec3 v;
+	double min_value = min(min(u.x,u.y),u.z);
+	if(min_value == u.x) {
+		v.x = 0;
+		v.y = -1 * u.z;
+		v.z = u.y;
+	} else if(min_value == u.y) {
+		v.y = 0;
+		v.x = -1 * u.z;
+		v.z = u.x;
+	} else {
+		v.z = 0;
+		v.x = -1 * u.y;
+		v.y = u.x;
+	}
+	return normalizeVec3(v);
+
 }
 
 Matrix4 Scene::createViewportMatrix(Camera *camera) {
@@ -165,12 +207,18 @@ Matrix4 Scene::createViewportMatrix(Camera *camera) {
 
 void Scene::applyTransformationToModelsVertices(vector<Vec4> &copied_vertices,Model* model, Matrix4 transformation_matrix)
 {
+	bool ismultiplied[copied_vertices.size()];
+	for(int i=0; i<copied_vertices.size();i++) ismultiplied[i] = false;
+
 	for(int triangle_iterator=0;triangle_iterator<model->numberOfTriangles;triangle_iterator++) {
 		for(int vertice=0;vertice<3;vertice++) {
 			int vertex_id = model->triangles[triangle_iterator].vertexIds[vertice];
-			Vec4 homogenous_coordinates = copied_vertices[vertex_id-1];
-			Vec4 transformed_vertex = multiplyMatrixWithVec4(transformation_matrix, homogenous_coordinates);
-			copied_vertices[vertex_id-1] = transformed_vertex;
+			if(!ismultiplied[vertex_id-1]) {
+				Vec4 homogenous_coordinates = copied_vertices[vertex_id-1];
+				Vec4 transformed_vertex = multiplyMatrixWithVec4(transformation_matrix, homogenous_coordinates);
+				copied_vertices[vertex_id-1] = transformed_vertex;
+				ismultiplied[vertex_id-1] = true;
+			}
 		}
 	}
 }
@@ -178,6 +226,9 @@ void Scene::applyTransformationToModelsVertices(vector<Vec4> &copied_vertices,Mo
 Matrix4 Scene::CalculateCameraTransformationMatrix(Camera *camera)
 {
 	Matrix4 cameraTransformationMatrix = Matrix4();
+	camera->u = normalizeVec3(camera->u);
+	camera->v = normalizeVec3(camera->v);
+	camera->w = normalizeVec3(camera->w);
 	cameraTransformationMatrix.val[0][0] = camera->u.x;
 	cameraTransformationMatrix.val[0][1] = camera->u.y;
 	cameraTransformationMatrix.val[0][2] = camera->u.z;
@@ -344,6 +395,20 @@ void Scene::applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_ma
 		Vec4 *temp2 = new Vec4(multiplyMatrixWithVec4(viewport_matrix, *lines[i].ending_point));
 		//delete lines[i].ending_point;
 		lines[i].ending_point = temp2;
+	}
+}
+
+void Scene::applyViewportTransformation(vector<Vec4> &copied_vertices, Matrix4 viewport_matrix, Camera *camera) {
+	for(int i=0; i<copied_vertices.size(); i++) {
+		copied_vertices[i] = multiplyMatrixWithVec4(viewport_matrix, copied_vertices[i]);
+		copied_vertices[i].x = round(copied_vertices[i].x);
+		copied_vertices[i].y = round(copied_vertices[i].y);
+		if(copied_vertices[i].x >= camera->horRes) {
+			printf("Vertex %d with x:%lf, y:%lf exceeds horres %d\n", i, copied_vertices[i].x, copied_vertices[i].y, camera->horRes);
+		}
+		if(copied_vertices[i].y >= camera->verRes) {
+			printf("Vertex %d with x:%lf, y:%lf exceeds verres %d\n", i, copied_vertices[i].x, copied_vertices[i].y, camera->verRes);
+		}
 	}
 }
 
