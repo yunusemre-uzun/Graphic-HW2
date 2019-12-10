@@ -34,6 +34,7 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	//vector<Line> lines = vector<Line>();
 	//this->clip(copied_vertices, vertex_visibility, lines);
 	// in HERE, we NEED TO DO BACKFACE CULLING (if enabled)
+	
 	if(this->projectionType) {
 		//this->applyProjectionDivide(lines);
 		this->applyProjectionDivide(copied_vertices);
@@ -44,6 +45,12 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	// From now on, we work on integer domain.
 	this->applyMidPointAlgorithm(copied_vertices);
 	return;
+}
+
+void Scene::doBackfaceCulling(vector<Vec4> &copied_vertices) {
+	for(int i=0; i<this->models.size(); i++) {
+
+	}
 }
 
 void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices) {

@@ -84,6 +84,7 @@ public:
 	void swapLinePoints(Line *line);
 	Color computeDc(Line *line,bool);
 	Color addColor(Color,Color);
+	void doBackfaceCulling(vector<Vec4> &copied_vertices);
 
 };
 
