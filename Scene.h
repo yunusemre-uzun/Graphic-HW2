@@ -85,7 +85,7 @@ public:
 	Color computeDc(Line *line,bool);
 	Color addColor(Color,Color);
 	void doBackfaceCulling(vector<Vec4> &copied_vertices);
-
+	Vec3 calculateNormal(vector<Line*> lines);
 	void render(vector<Vec4> &);
 	void rasterizeTriangles(vector<Vec4>&,Model*);
 	vector<Vec3> getLineEquations(vector<Line*>);

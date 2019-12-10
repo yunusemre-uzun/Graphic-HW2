@@ -34,7 +34,9 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	//vector<Line> lines = vector<Line>();
 	//this->clip(copied_vertices, vertex_visibility, lines);
 	// in HERE, we NEED TO DO BACKFACE CULLING (if enabled)
-	
+	if(this->cullingEnabled) {
+		this->doBackfaceCulling(copied_vertices);
+	}
 	if(this->projectionType) {
 		//this->applyProjectionDivide(lines);
 		this->applyProjectionDivide(copied_vertices);
@@ -45,6 +47,34 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	// From now on, we work on integer domain.
 	this->render(copied_vertices);
 	return;
+}
+
+void Scene::doBackfaceCulling(vector<Vec4> &copied_vertices) {
+	for(int i=0; i<this->models.size();i++) {
+		Model *current_model = models[i];
+		for(int j=0; j<current_model->numberOfTriangles; j++) {
+			Triangle *current_triangle = &(current_model->triangles[j]);
+			vector<Line*> lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
+			Vec3 normal = this->calculateNormal(lines);
+			Vec4 *point_on_triangle = lines[0]->ending_point;
+			Vec3 vec3_point_on_triangle = Vec3(point_on_triangle->x, point_on_triangle->y, point_on_triangle->z, -1);
+			normal = normalizeVec3(normal);
+			vec3_point_on_triangle = normalizeVec3(vec3_point_on_triangle);
+			double dotProduct = dotProductVec3(normal, vec3_point_on_triangle);
+			if(dotProduct > 0) current_triangle->isCulled = false;
+			else current_triangle->isCulled = true;
+		}
+	}
+}
+
+Vec3 Scene::calculateNormal(vector<Line*> lines) {
+	Vec3 first_line = Vec3(lines[0]->ending_point->x - lines[0]->starting_point->x,
+						lines[0]->ending_point->y - lines[0]->starting_point->y,
+						lines[0]->ending_point->z - lines[0]->starting_point->z, -1);
+	Vec3 second_line = Vec3(lines[1]->ending_point->x - lines[1]->starting_point->x,
+						lines[1]->ending_point->y - lines[1]->starting_point->y,
+						lines[1]->ending_point->z - lines[1]->starting_point->z, -1);
+	return crossProductVec3(first_line, second_line);
 }
 
 void Scene::render(vector<Vec4> &copied_vertices) {
@@ -59,7 +89,9 @@ void Scene::render(vector<Vec4> &copied_vertices) {
 
 void Scene::rasterizeTriangles(vector<Vec4> &copied_vertices, Model* current_model) {
 	for (int j=0; j<current_model->numberOfTriangles;j++) {
-		Triangle current_triangle = current_model->triangles[j];
+		Triangle *current_trianglep = &(current_model->triangles[j]);
+		if(current_trianglep->isCulled) continue;
+		Triangle current_triangle = *current_trianglep;
 		vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
 		vector<Vec3> line_equations = this->getLineEquations(lines);
 		Vec4 vertex_0 = copied_vertices[current_triangle.getFirstVertexId()-1];
@@ -100,10 +132,10 @@ double Scene::calculateLineEquations(double x, double y, Vec3 line_equation) {
 vector<Vec3> Scene::getLineEquations(vector<Line*> lines) {
 	vector<Vec3> line_equations = vector<Vec3>();
 	for(int i=0;i<3;i++) {
-		double x_diff = lines[i]->starting_point->x-lines[i]->ending_point->x;
-		double y_diff = lines[i]->starting_point->y-lines[i]->ending_point->y;
+		double x_diff = lines[i]->ending_point->x - lines[i]->starting_point->x;
+		double y_diff = lines[i]->starting_point->y - lines[i]->ending_point->y;
 		double constant = lines[i]->starting_point->x*lines[i]->ending_point->y - lines[i]->starting_point->y*lines[i]->ending_point->x;
-		Vec3 *equation = new Vec3(x_diff,y_diff,constant,-1);
+		Vec3 *equation = new Vec3(y_diff,x_diff,constant,-1);
 		line_equations.push_back(*equation);
 	}
 	return line_equations;
@@ -111,7 +143,9 @@ vector<Vec3> Scene::getLineEquations(vector<Line*> lines) {
 
 void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices, Model* current_model) {
 	for(int j=0; j<current_model->numberOfTriangles; j++) {
-		Triangle current_triangle = current_model->triangles[j];
+		Triangle *current_trianglep = &(current_model->triangles[j]);
+		if(current_trianglep->isCulled) continue;
+		Triangle current_triangle = *current_trianglep;
 		vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
 		for(int k=0; k<3; k++) {
 			double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
