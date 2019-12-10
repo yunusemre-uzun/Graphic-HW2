@@ -254,6 +254,7 @@ void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility,
 				double dx = lines[k].ending_point->x - lines[k].starting_point->x;
 				double dy = lines[k].ending_point->y - lines[k].starting_point->y;
 				double dz = lines[k].ending_point->z - lines[k].starting_point->z;
+				double dt = lines[k].ending_point->t - lines[k].starting_point->t;
 				double wmin = lines[k].starting_point->t;
 				double wmax = -1 * lines[k].starting_point->t;
 				// case check for negative w
@@ -275,12 +276,12 @@ void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility,
 					Line *line = new Line;
 					if(tl<1) {
 						end_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,lines[k].ending_point->t,lines[k].ending_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,lines[k].starting_point->t + dt*tl,lines[k].ending_point->colorId);
 						line->ending_point = new_vertice;
 					}
 					if(te > 0) {
 						start_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,lines[k].starting_point->t,lines[k].starting_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,lines[k].starting_point->t + dt*te,lines[k].starting_point->colorId);
 						line->starting_point = new_vertice;
 					}
 					if(end_flag) {
