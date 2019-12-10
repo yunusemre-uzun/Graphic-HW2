@@ -82,7 +82,6 @@ vector<Vec4> Scene::copyVertices(vector<bool> &vertex_visibility)
 
 void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
 {
-	int rotation_count = 0;
 	for(int model_iterator=0;model_iterator<this->models.size();model_iterator++) {
 		Model *model = this->models[model_iterator];
 		for(int transformation_iterator=0;transformation_iterator<model->numberOfTransformations;transformation_iterator++) {
@@ -107,14 +106,12 @@ void Scene::applyTransformationsToModels(vector<Vec4> &copied_vertices)
 				Rotation *rotation = this->rotations[model->transformationIds[transformation_iterator]-1];
 				Matrix4 rotation_matrix = this->createRotationMatrix(rotation->angle,rotation->ux,rotation->uy,rotation->uz);
 				this->applyTransformationToModelsVertices(copied_vertices,model,rotation_matrix);
-				rotation_count++;
 				break;
 				}
 			default:
 				break;
 			}
 		}
-		printf("Done %d rotations", rotation_count);
 	}
 	return;
 }
