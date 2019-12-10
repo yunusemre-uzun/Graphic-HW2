@@ -43,36 +43,89 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	//this->applyViewportTransformation(lines, viewport_matrix);
 	this->applyViewportTransformation(copied_vertices, viewport_matrix, camera);
 	// From now on, we work on integer domain.
-	this->applyMidPointAlgorithm(copied_vertices);
+	this->render(copied_vertices);
 	return;
 }
 
-void Scene::doBackfaceCulling(vector<Vec4> &copied_vertices) {
-	for(int i=0; i<this->models.size(); i++) {
-
+void Scene::render(vector<Vec4> &copied_vertices) {
+	for(int i=0;i<this->models.size();i++) {
+		if(this->models[i]->type) {
+			this->rasterizeTriangles(copied_vertices,this->models[i]);
+		} else {
+			this->applyMidPointAlgorithm(copied_vertices, this->models[i]);
+		}
 	}
 }
 
-void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices) {
-	for(int i=0; i<this->models.size(); i++) {
-		Model *current_model = this->models[i];
-		for(int j=0; j<current_model->numberOfTriangles; j++) {
-			Triangle current_triangle = current_model->triangles[j];
-			vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
-			for(int k=0; k<3; k++) {
-				double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
-				bool isReflected = false;
-				if(!this->isStandardLine(lines[k])) this->swapLinePoints(lines[k]);
-				if(slope < 0) {
-					// Compute new end point.
-					isReflected = true;
-					//lines[k]->ending_point->x += 2 * abs(lines[k]->ending_point->x - lines[k]->starting_point->x);
+void Scene::rasterizeTriangles(vector<Vec4> &copied_vertices, Model* current_model) {
+	for (int j=0; j<current_model->numberOfTriangles;j++) {
+		Triangle current_triangle = current_model->triangles[j];
+		vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
+		vector<Vec3> line_equations = this->getLineEquations(lines);
+		Vec4 vertex_0 = copied_vertices[current_triangle.getFirstVertexId()-1];
+		Vec4 vertex_1 = copied_vertices[current_triangle.getSecondVertexId()-1];
+		Vec4 vertex_2 = copied_vertices[current_triangle.getThirdVertexId()-1];
+		int x_min = min(vertex_2.x,min(vertex_0.x,vertex_1.x));
+		int y_min = min(vertex_2.y,min(vertex_0.y,vertex_1.y));
+		int x_max = max(vertex_2.x,max(vertex_0.x,vertex_1.x));
+		int y_max = max(vertex_2.y,max(vertex_0.y,vertex_1.y));
+		for(int x=x_min;x<x_max;x++) {
+			for(int y=y_min;y<y_max;y++) {
+				double alpha = this->calculateLineEquations(x,y,line_equations[1])/this->calculateLineEquations(vertex_0.x,vertex_0.y,line_equations[1]);
+				double beta = this->calculateLineEquations(x,y,line_equations[2])/this->calculateLineEquations(vertex_1.x,vertex_1.y,line_equations[2]);
+				double gamma = this->calculateLineEquations(x,y,line_equations[0])/this->calculateLineEquations(vertex_2.x,vertex_2.y,line_equations[0]);
+				if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+					Color *c0 = this->colorsOfVertices[vertex_0.colorId-1];
+					Color *c1 = this->colorsOfVertices[vertex_1.colorId-1];
+					Color *c2 = this->colorsOfVertices[vertex_2.colorId-1];
+					Color color_of_pixel = this->calculateAverageColor(c0,c1,c2,alpha,beta,gamma);
+					this->drawStandard(x,y,color_of_pixel);
 				}
-				if((slope < 0 && slope > -1) || (slope > 0 && slope < 1)) this->midPointStandard(lines[k], isReflected);
-				else if(slope == 0) this->drawHorizontalLine(lines[k]);
-				else if(slope == __DBL_MAX__) this->drawVerticalLine(lines[k]);
-				else this->midPointSwapped(lines[k], isReflected);
 			}
+		}
+	}
+}
+
+Color Scene::calculateAverageColor(Color* c0, Color* c1, Color* c2, double alpha, double beta, double gamma) {
+	double avg_red = alpha*(c0->r) + beta*(c1->r) + gamma*(c2->r);
+	double avg_green = alpha*(c0->g) + beta*(c1->g) + gamma*(c2->g);
+	double avg_blue = alpha*(c0->b) + beta*(c1->b) + gamma*(c2->b);
+	return Color(avg_red,avg_green,avg_blue);
+}
+
+double Scene::calculateLineEquations(double x, double y, Vec3 line_equation) {
+	return x*line_equation.x + y*line_equation.y + line_equation.z;
+}
+
+vector<Vec3> Scene::getLineEquations(vector<Line*> lines) {
+	vector<Vec3> line_equations = vector<Vec3>();
+	for(int i=0;i<3;i++) {
+		double x_diff = lines[i]->starting_point->x-lines[i]->ending_point->x;
+		double y_diff = lines[i]->starting_point->y-lines[i]->ending_point->y;
+		double constant = lines[i]->starting_point->x*lines[i]->ending_point->y - lines[i]->starting_point->y*lines[i]->ending_point->x;
+		Vec3 *equation = new Vec3(x_diff,y_diff,constant,-1);
+		line_equations.push_back(*equation);
+	}
+	return line_equations;
+}
+
+void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices, Model* current_model) {
+	for(int j=0; j<current_model->numberOfTriangles; j++) {
+		Triangle current_triangle = current_model->triangles[j];
+		vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
+		for(int k=0; k<3; k++) {
+			double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
+			bool isReflected = false;
+			if(!this->isStandardLine(lines[k])) this->swapLinePoints(lines[k]);
+			if(slope < 0) {
+				// Compute new end point.
+				isReflected = true;
+				//lines[k]->ending_point->x += 2 * abs(lines[k]->ending_point->x - lines[k]->starting_point->x);
+			}
+			if((slope < 0 && slope > -1) || (slope > 0 && slope < 1)) this->midPointStandard(lines[k], isReflected);
+			else if(slope == 0) this->drawHorizontalLine(lines[k]);
+			else if(slope == __DBL_MAX__) this->drawVerticalLine(lines[k]);
+			else this->midPointSwapped(lines[k], isReflected);
 		}
 	}
 }

@@ -70,7 +70,7 @@ public:
 	void applyProjectionDivide(vector<Line> &lines);
 	void applyProjectionDivide(vector<Vec4> &copied_vertices);
 	Vec3 calculateVectorV(Vec3 u);
-	void applyMidPointAlgorithm(vector<Vec4> &copied_vertices);
+	void applyMidPointAlgorithm(vector<Vec4> &copied_vertices,Model*);
 	vector<Line*> getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_vertices);
 	void midPoint(Line *line);
 	double calculateSlope(Vec4 *starting_point, Vec4 *ending_point);
@@ -86,6 +86,11 @@ public:
 	Color addColor(Color,Color);
 	void doBackfaceCulling(vector<Vec4> &copied_vertices);
 
+	void render(vector<Vec4> &);
+	void rasterizeTriangles(vector<Vec4>&,Model*);
+	vector<Vec3> getLineEquations(vector<Line*>);
+	double calculateLineEquations(double,double,Vec3);
+	Color calculateAverageColor(Color* c0, Color* c1, Color* c2, double alpha, double beta, double gamma);
 };
 
 #endif
