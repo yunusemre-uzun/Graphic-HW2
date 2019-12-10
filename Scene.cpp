@@ -86,6 +86,24 @@ bool Scene::isStandardLine(Line *line) {
 	if(line->starting_point->y < line->ending_point->y) return true;
 	else return false;
 }
+Color Scene::computeDc(Line *line) {
+	Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
+	Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId]);
+	double dc_red = (starting_color.r-ending_color.r)/(line->ending_point->x-line->starting_point->x);
+	double dc_green = (starting_color.g-ending_color.g)/(line->ending_point->x-line->starting_point->x);
+	double dc_blue = (starting_color.b-ending_color.b)/(line->ending_point->x-line->starting_point->x);
+	Color dc = Color(dc_red,dc_green,dc_blue);
+	return dc;
+}
+
+Color Scene::addColor(Color color1, Color color2) {
+	short int result_color_red = color1.r + color2.r;
+	short int result_color_green = color1.g + color2.g;
+	short int result_color_blue = color1.b + color2.b;
+	return Color(result_color_red,result_color_green,result_color_blue);
+}
+
+
 
 void Scene::midPointStandard(Line *line, bool isReflected) {
 	//double slope = calculateSlope(line->starting_point, line->ending_point);
@@ -93,21 +111,15 @@ void Scene::midPointStandard(Line *line, bool isReflected) {
 	int d = 2 * ((line->starting_point)->y - (line->ending_point)->y) + (line->ending_point->x - line->starting_point->x);
 	int NE_value_to_increment = d;
 	int E_value_to_increment = 2 * (line->starting_point->y - line->ending_point->y);
-	/*
-	Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
-	Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId]);
-	double dc_red = (starting_color.r-ending_color.r)/(line->ending_point->x-line->starting_point->x);
-	double dc_green = (starting_color.g-ending_color.g)/(line->ending_point->x-line->starting_point->x);
-	double dc_blue = (starting_color.b-ending_color.b)/(line->ending_point->x-line->starting_point->x);
-	*/
-	//Color dc = Color(,starting_color.g-ending_color.g,starting_color.b-ending_color.b);
+	Color initial_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
+	Color dc = this->computeDc(line);
 	for(int x = line->starting_point->x; x<line->ending_point->x; x++) {
 		// Draw the point.
 		if(isReflected) {
 			// TODO: COLOR NEEDS TO BE COMPUTED!!!!
-			drawReflected(x, y, line->starting_point->x, Color(25,25,25));
+			drawReflected(x, y, line->starting_point->x, initial_color);
 		} else {
-			drawStandard(x, y, Color(25,25,25));
+			drawStandard(x, y, initial_color);
 		}
 		if(d<0) {
 			// Choose NE
@@ -117,6 +129,7 @@ void Scene::midPointStandard(Line *line, bool isReflected) {
 			// Choose E
 			d += E_value_to_increment;
 		}
+		initial_color = this->addColor(initial_color,dc);
 	}
 }
 
