@@ -82,7 +82,7 @@ public:
 	void drawHorizontalLine(Line *line);
 	bool isStandardLine(Line *line);
 	void swapLinePoints(Line *line);
-	Color computeDc(Line *line);
+	Color computeDc(Line *line,bool);
 	Color addColor(Color,Color);
 
 };

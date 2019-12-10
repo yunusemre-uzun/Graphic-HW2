@@ -56,7 +56,11 @@ void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices) {
 				double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
 				bool isReflected = false;
 				if(!this->isStandardLine(lines[k])) this->swapLinePoints(lines[k]);
-				if(slope < 0) isReflected = true;
+				if(slope < 0) {
+					// Compute new end point.
+					isReflected = true;
+					//lines[k]->ending_point->x += 2 * abs(lines[k]->ending_point->x - lines[k]->starting_point->x);
+				}
 				if((slope < 0 && slope > -1) || (slope > 0 && slope < 1)) this->midPointStandard(lines[k], isReflected);
 				else if(slope == 0) this->drawHorizontalLine(lines[k]);
 				else if(slope == __DBL_MAX__) this->drawVerticalLine(lines[k]);
@@ -86,20 +90,31 @@ bool Scene::isStandardLine(Line *line) {
 	if(line->starting_point->y < line->ending_point->y) return true;
 	else return false;
 }
-Color Scene::computeDc(Line *line) {
-	Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
-	Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId]);
-	double dc_red = (starting_color.r-ending_color.r)/(line->ending_point->x-line->starting_point->x);
-	double dc_green = (starting_color.g-ending_color.g)/(line->ending_point->x-line->starting_point->x);
-	double dc_blue = (starting_color.b-ending_color.b)/(line->ending_point->x-line->starting_point->x);
-	Color dc = Color(dc_red,dc_green,dc_blue);
-	return dc;
+Color Scene::computeDc(Line *line, bool swapped) {
+	if(!swapped) {
+		Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId-1]);
+		Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId-1]);
+		double dc_red = (ending_color.r - starting_color.r)/abs(line->ending_point->x-line->starting_point->x);
+		double dc_green = (ending_color.g-starting_color.g)/abs(line->ending_point->x-line->starting_point->x);
+		double dc_blue = (ending_color.b - starting_color.b)/abs(line->ending_point->x-line->starting_point->x);
+		Color dc = Color(dc_red,dc_green,dc_blue);
+		return dc;
+	} else {
+		Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId-1]);
+		Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId-1]);
+		double dc_red = (ending_color.r - starting_color.r)/abs(line->ending_point->y-line->starting_point->y);
+		double dc_green = (ending_color.g-starting_color.g)/abs(line->ending_point->y-line->starting_point->y);
+		double dc_blue = (ending_color.b - starting_color.b)/abs(line->ending_point->y-line->starting_point->y);
+		Color dc = Color(dc_red,dc_green,dc_blue);
+		return dc;
+	}
+	
 }
 
 Color Scene::addColor(Color color1, Color color2) {
-	short int result_color_red = color1.r + color2.r;
-	short int result_color_green = color1.g + color2.g;
-	short int result_color_blue = color1.b + color2.b;
+	double result_color_red = color1.r + color2.r;
+	double result_color_green = color1.g + color2.g;
+	double result_color_blue = color1.b + color2.b;
 	return Color(result_color_red,result_color_green,result_color_blue);
 }
 
@@ -108,51 +123,97 @@ Color Scene::addColor(Color color1, Color color2) {
 void Scene::midPointStandard(Line *line, bool isReflected) {
 	//double slope = calculateSlope(line->starting_point, line->ending_point);
 	int y = (line->starting_point)->y;
-	int d = 2 * ((line->starting_point)->y - (line->ending_point)->y) + (line->ending_point->x - line->starting_point->x);
-	int NE_value_to_increment = d;
-	int E_value_to_increment = 2 * (line->starting_point->y - line->ending_point->y);
-	Color initial_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
-	Color dc = this->computeDc(line);
-	for(int x = line->starting_point->x; x<line->ending_point->x; x++) {
-		// Draw the point.
-		if(isReflected) {
-			// TODO: COLOR NEEDS TO BE COMPUTED!!!!
-			drawReflected(x, y, line->starting_point->x, initial_color);
-		} else {
+	int d;
+	int NE_value_to_increment;
+	int E_value_to_increment;
+	if(!isReflected) {
+		d = 2 * ((line->starting_point)->y - (line->ending_point)->y) + (line->ending_point->x - line->starting_point->x);
+		NE_value_to_increment = 2*(line->starting_point->y - line->ending_point->y + line->ending_point->x - line->starting_point->x);
+		E_value_to_increment = 2 * (line->starting_point->y - line->ending_point->y);
+	}
+	else {
+		d = 2 * ((line->starting_point)->y - (line->ending_point)->y) + ( line->starting_point->x - line->ending_point->x );
+		NE_value_to_increment = 2*(line->starting_point->y - line->ending_point->y + line->starting_point->x - line->ending_point->x);
+		E_value_to_increment = 2 * (line->starting_point->y - line->ending_point->y);
+	}
+	
+	Color initial_color = *(this->colorsOfVertices[(line->starting_point)->colorId-1]);
+	Color dc = this->computeDc(line,false);
+	if(!isReflected) {
+		for(int x = line->starting_point->x; x<line->ending_point->x; x++) {
+			// Draw the point.
 			drawStandard(x, y, initial_color);
+			if(d<0) {
+				// Choose NE
+				y++;
+				d += NE_value_to_increment;
+			} else {
+				// Choose E
+				d += E_value_to_increment;
+			}
+			initial_color = this->addColor(initial_color,dc);
 		}
-		if(d<0) {
-			// Choose NE
-			y++;
-			d += NE_value_to_increment;
-		} else {
-			// Choose E
-			d += E_value_to_increment;
+	} else {
+		for(int x = line->starting_point->x; x>line->ending_point->x; x--) {
+			// Draw the point.
+			drawStandard(x, y, initial_color);
+			if(d<0) {
+				// Choose NW
+				y++;
+				d += NE_value_to_increment;
+			} else {
+				// Choose W
+				d += E_value_to_increment;
+			}
+			initial_color = this->addColor(initial_color,dc);
 		}
-		initial_color = this->addColor(initial_color,dc);
 	}
 }
 
 // x acts like y, y acts like x
 void Scene::midPointSwapped(Line *line, bool isReflected) {
 	int x = line->starting_point->x;
-	int d = 2 * (line->starting_point->x - line->ending_point->x) + (line->ending_point->y - line->starting_point->y);
-	int NE_value_to_increment = d;
-	int N_value_to_increment = 2 * (line->starting_point->x - line->ending_point->x);
-	for(int y = line->starting_point->y; y<line->ending_point->y; y++) {
-		if(isReflected) {
-			// TODO: COLOR NEEDS TO BE COMPUTED!!!!
-			drawReflected(x, y, line->starting_point->x, Color(25,25,25));
-		} else {
-			drawStandard(x, y, Color(25,25,25));
+	int d;
+	int NE_value_to_increment;
+	int N_value_to_increment;
+	if(!isReflected) {
+		d = 2 * (line->starting_point->x - line->ending_point->x) + (line->ending_point->y - line->starting_point->y);
+		NE_value_to_increment = 2*((line->starting_point->x - line->ending_point->x) + (line->ending_point->y - line->starting_point->y));
+		N_value_to_increment = 2 * (line->starting_point->x - line->ending_point->x);
+	}
+	else {
+		d = 2 * (line->starting_point->x - line->ending_point->x) + ( line->starting_point->y - line->ending_point->y);
+		NE_value_to_increment = 2*((line->starting_point->x - line->ending_point->x) + (line->starting_point->y - line->ending_point->y));
+		N_value_to_increment = 2 * (line->starting_point->x - line->ending_point->x);
+	}
+	
+	Color initial_color = *(this->colorsOfVertices[(line->starting_point)->colorId-1]);
+	Color dc = this->computeDc(line,true);
+	if(!isReflected) {
+		for(int y = line->starting_point->y; y<line->ending_point->y; y++) {
+			drawStandard(x, y, initial_color);
+			if(d<0) {
+				// Choose NE
+				x++;
+				d += NE_value_to_increment;
+			} else {
+				// Choose N
+				d += N_value_to_increment;
+			}
+			initial_color = this->addColor(initial_color,dc);
 		}
-		if(d<0) {
-			// Choose NE
-			x++;
-			d += NE_value_to_increment;
-		} else {
-			// Choose N
-			d += N_value_to_increment;
+	} else {
+		for(int y = line->starting_point->y; y<line->ending_point->y; y++) {
+			drawStandard(x, y, initial_color);
+			if(d>0) {
+				// Choose NW
+				x--;
+				d += NE_value_to_increment;
+			} else {
+				// Choose N
+				d += N_value_to_increment;
+			}
+			initial_color = this->addColor(initial_color,dc);
 		}
 	}
 }
@@ -162,7 +223,7 @@ void Scene::drawStandard(int x, int y, Color color) {
 }
 
 void Scene::drawReflected(int x, int y, int reflection_coefficient, Color color) {
-	int x_to_draw = -1 * x + 2 * reflection_coefficient;
+	int x_to_draw = x - 2 * abs(reflection_coefficient-x);
 	(this->image)[x_to_draw][y] = color;
 }
 
@@ -182,12 +243,12 @@ vector<Line*> Scene::getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_
 	Line* line12 = new Line;
 	Line* line23 = new Line;
 	Line* line31 = new Line;
-	line12->starting_point = &(copied_vertices[triangle.getFirstVertexId()]);
-	line12->ending_point = &(copied_vertices[triangle.getSecondVertexId()]);
-	line23->starting_point = &(copied_vertices[triangle.getSecondVertexId()]);
-	line23->ending_point = &(copied_vertices[triangle.getThirdVertexId()]);
-	line31->starting_point = &(copied_vertices[triangle.getThirdVertexId()]);
-	line31->ending_point = &(copied_vertices[triangle.getFirstVertexId()]);
+	line12->starting_point = &(copied_vertices[triangle.getFirstVertexId()-1]);
+	line12->ending_point = &(copied_vertices[triangle.getSecondVertexId()-1]);
+	line23->starting_point = &(copied_vertices[triangle.getSecondVertexId()-1]);
+	line23->ending_point = &(copied_vertices[triangle.getThirdVertexId()-1]);
+	line31->starting_point = &(copied_vertices[triangle.getThirdVertexId()-1]);
+	line31->ending_point = &(copied_vertices[triangle.getFirstVertexId()-1]);
 	result.push_back(line12);
 	result.push_back(line23);
 	result.push_back(line31);
