@@ -78,6 +78,10 @@ public:
 	void midPointSwapped(Line *line, bool isReflected);
 	void drawStandard(int x, int y, Color color);
 	void drawReflected(int x, int y, int reflection_coefficient, Color color);
+	void drawVerticalLine(Line *line);
+	void drawHorizontalLine(Line *line);
+	bool isStandardLine(Line *line);
+	void swapLinePoints(Line *line);
 
 };
 

@@ -53,10 +53,38 @@ void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices) {
 			Triangle current_triangle = current_model->triangles[j];
 			vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
 			for(int k=0; k<3; k++) {
-
+				double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
+				bool isReflected = false;
+				if(!this->isStandardLine(lines[k])) this->swapLinePoints(lines[k]);
+				if(slope < 0) isReflected = true;
+				if((slope < 0 && slope > -1) || (slope > 0 && slope < 1)) this->midPointStandard(lines[k], isReflected);
+				else if(slope == 0) this->drawHorizontalLine(lines[k]);
+				else if(slope == __DBL_MAX__) this->drawVerticalLine(lines[k]);
+				else this->midPointSwapped(lines[k], isReflected);
 			}
 		}
 	}
+}
+
+void Scene::drawVerticalLine(Line *line) {
+	for(int i=line->starting_point->y; i<line->ending_point->y; i++)
+		this->drawStandard(line->starting_point->x, i, Color(25,25,25));
+}
+
+void Scene::drawHorizontalLine(Line *line) {
+	for(int i=line->starting_point->x; i<line->ending_point->x; i++)
+		this->drawStandard(i, line->starting_point->y, Color(25,25,25));
+}
+
+void Scene::swapLinePoints(Line *line) {
+	Vec4 *temp = (line->starting_point);
+	line->starting_point = line->ending_point;
+	line->ending_point = temp;
+}
+
+bool Scene::isStandardLine(Line *line) {
+	if(line->starting_point->y < line->ending_point->y) return true;
+	else return false;
 }
 
 void Scene::midPointStandard(Line *line, bool isReflected) {
@@ -96,6 +124,24 @@ void Scene::midPointStandard(Line *line, bool isReflected) {
 void Scene::midPointSwapped(Line *line, bool isReflected) {
 	int x = line->starting_point->x;
 	int d = 2 * (line->starting_point->x - line->ending_point->x) + (line->ending_point->y - line->starting_point->y);
+	int NE_value_to_increment = d;
+	int N_value_to_increment = 2 * (line->starting_point->x - line->ending_point->x);
+	for(int y = line->starting_point->y; y<line->ending_point->y; y++) {
+		if(isReflected) {
+			// TODO: COLOR NEEDS TO BE COMPUTED!!!!
+			drawReflected(x, y, line->starting_point->x, Color(25,25,25));
+		} else {
+			drawStandard(x, y, Color(25,25,25));
+		}
+		if(d<0) {
+			// Choose NE
+			x++;
+			d += NE_value_to_increment;
+		} else {
+			// Choose N
+			d += N_value_to_increment;
+		}
+	}
 }
 
 void Scene::drawStandard(int x, int y, Color color) {
@@ -112,6 +158,9 @@ double Scene::calculateSlope(Vec4 *starting_point, Vec4 *ending_point) {
 	double x_end = ending_point->x;
 	double y_start = starting_point->y;
 	double y_end = ending_point->y;
+	if(x_end - x_start == 0) {
+		return __DBL_MAX__;
+	}
 	return (y_end - y_start) / (x_end - x_start);
 }
 
