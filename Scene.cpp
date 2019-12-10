@@ -42,7 +42,94 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	//this->applyViewportTransformation(lines, viewport_matrix);
 	this->applyViewportTransformation(copied_vertices, viewport_matrix, camera);
 	// From now on, we work on integer domain.
+	this->applyMidPointAlgorithm(copied_vertices);
 	return;
+}
+
+void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices) {
+	for(int i=0; i<this->models.size(); i++) {
+		Model *current_model = this->models[i];
+		for(int j=0; j<current_model->numberOfTriangles; j++) {
+			Triangle current_triangle = current_model->triangles[j];
+			vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
+			for(int k=0; k<3; k++) {
+
+			}
+		}
+	}
+}
+
+void Scene::midPointStandard(Line *line, bool isReflected) {
+	//double slope = calculateSlope(line->starting_point, line->ending_point);
+	int y = (line->starting_point)->y;
+	int d = 2 * ((line->starting_point)->y - (line->ending_point)->y) + (line->ending_point->x - line->starting_point->x);
+	int NE_value_to_increment = d;
+	int E_value_to_increment = 2 * (line->starting_point->y - line->ending_point->y);
+	/*
+	Color starting_color = *(this->colorsOfVertices[(line->starting_point)->colorId]);
+	Color ending_color =  *(this->colorsOfVertices[(line->ending_point)->colorId]);
+	double dc_red = (starting_color.r-ending_color.r)/(line->ending_point->x-line->starting_point->x);
+	double dc_green = (starting_color.g-ending_color.g)/(line->ending_point->x-line->starting_point->x);
+	double dc_blue = (starting_color.b-ending_color.b)/(line->ending_point->x-line->starting_point->x);
+	*/
+	//Color dc = Color(,starting_color.g-ending_color.g,starting_color.b-ending_color.b);
+	for(int x = line->starting_point->x; x<line->ending_point->x; x++) {
+		// Draw the point.
+		if(isReflected) {
+			// TODO: COLOR NEEDS TO BE COMPUTED!!!!
+			drawReflected(x, y, line->starting_point->x, Color(25,25,25));
+		} else {
+			drawStandard(x, y, Color(25,25,25));
+		}
+		if(d<0) {
+			// Choose NE
+			y++;
+			d += NE_value_to_increment;
+		} else {
+			// Choose E
+			d += E_value_to_increment;
+		}
+	}
+}
+
+// x acts like y, y acts like x
+void Scene::midPointSwapped(Line *line, bool isReflected) {
+	int x = line->starting_point->x;
+	int d = 2 * (line->starting_point->x - line->ending_point->x) + (line->ending_point->y - line->starting_point->y);
+}
+
+void Scene::drawStandard(int x, int y, Color color) {
+	(this->image)[x][y] = color;
+}
+
+void Scene::drawReflected(int x, int y, int reflection_coefficient, Color color) {
+	int x_to_draw = -1 * x + 2 * reflection_coefficient;
+	(this->image)[x_to_draw][y] = color;
+}
+
+double Scene::calculateSlope(Vec4 *starting_point, Vec4 *ending_point) {
+	double x_start = starting_point->x;
+	double x_end = ending_point->x;
+	double y_start = starting_point->y;
+	double y_end = ending_point->y;
+	return (y_end - y_start) / (x_end - x_start);
+}
+
+vector<Line*> Scene::getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_vertices) {
+	vector<Line*> result; 
+	Line* line12 = new Line;
+	Line* line23 = new Line;
+	Line* line31 = new Line;
+	line12->starting_point = &(copied_vertices[triangle.getFirstVertexId()]);
+	line12->ending_point = &(copied_vertices[triangle.getSecondVertexId()]);
+	line23->starting_point = &(copied_vertices[triangle.getSecondVertexId()]);
+	line23->ending_point = &(copied_vertices[triangle.getThirdVertexId()]);
+	line31->starting_point = &(copied_vertices[triangle.getThirdVertexId()]);
+	line31->ending_point = &(copied_vertices[triangle.getFirstVertexId()]);
+	result.push_back(line12);
+	result.push_back(line23);
+	result.push_back(line31);
+	return result;
 }
 
 void Scene::applyProjectionDivide(vector<Line> &lines)

@@ -70,6 +70,15 @@ public:
 	void applyProjectionDivide(vector<Line> &lines);
 	void applyProjectionDivide(vector<Vec4> &copied_vertices);
 	Vec3 calculateVectorV(Vec3 u);
+	void applyMidPointAlgorithm(vector<Vec4> &copied_vertices);
+	vector<Line*> getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_vertices);
+	void midPoint(Line *line);
+	double calculateSlope(Vec4 *starting_point, Vec4 *ending_point);
+	void midPointStandard(Line *line, bool isReflected);
+	void midPointSwapped(Line *line, bool isReflected);
+	void drawStandard(int x, int y, Color color);
+	void drawReflected(int x, int y, int reflection_coefficient, Color color);
+
 };
 
 #endif
