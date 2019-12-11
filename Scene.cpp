@@ -32,7 +32,6 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	Matrix4 projection_matrix = createProjectionMatrix(camera);
 	this->applyProjectionMatrix(copied_vertices,projection_matrix);
 	//vector<Line> lines = vector<Line>();
-	this->clip(copied_vertices);
 	// in HERE, we NEED TO DO BACKFACE CULLING (if enabled)
 	if(this->cullingEnabled) {
 		this->doBackfaceCulling(copied_vertices);
@@ -41,6 +40,7 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 		//this->applyProjectionDivide(lines);
 		this->applyProjectionDivide(copied_vertices);
 	}
+	this->clip(copied_vertices);
 	Matrix4 viewport_matrix = this->createViewportMatrix(camera);
 	//this->applyViewportTransformation(lines, viewport_matrix);
 	this->applyViewportTransformation(copied_vertices, viewport_matrix, camera);
@@ -55,12 +55,7 @@ void Scene::doBackfaceCulling(vector<Vec4> &copied_vertices) {
 		for(int j=0; j<current_model->numberOfTriangles; j++) {
 			Triangle *current_triangle = &(current_model->triangles[j]);
 			vector<Line*> lines;
-			if(current_model->type == 0) {
-				// Clipping mode enabled.
-				lines = this->getClippedLinesOfTriangle(current_triangle, copied_vertices);
-			} else {
-				lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
-			}
+			lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
 			if(lines.size() < 3) continue;
 			Vec3 normal = this->calculateNormal(lines);
 			Vec4 *point_on_triangle = lines[0]->ending_point;
@@ -325,13 +320,13 @@ void Scene::midPointSwapped(Line *line, bool isReflected) {
 }
 
 void Scene::drawStandard(int x, int y, Color color) {
-	if(x < this->cameras[0]->horRes && y < this->cameras[0]->verRes)
+	if(x < this->cameras[0]->horRes && y < this->cameras[0]->verRes && x > 0 && y>0)
 		(this->image)[x][y] = color;
 }
 
 void Scene::drawReflected(int x, int y, int reflection_coefficient, Color color) {
 	int x_to_draw = x - 2 * abs(reflection_coefficient-x);
-	if(x_to_draw < this->cameras[0]->horRes && y < this->cameras[0]->verRes)
+	if(x_to_draw < this->cameras[0]->horRes && y < this->cameras[0]->verRes && x_to_draw>0 && y>0)
 		(this->image)[x_to_draw][y] = color;
 }
 
@@ -618,6 +613,7 @@ void Scene::applyProjectionMatrix(vector<Vec4> &copied_vertices,Matrix4 projecti
 void Scene::clip(vector<Vec4> &copied_vertices) {
 	for(int i=0; i<this->models.size(); i++) {
 		Model *model = this->models[i];
+		if(model->type) continue;
 		for(int j=0; j<model->numberOfTriangles; j++) {
 			Triangle *triangle = &(model->triangles[j]);
 			Line line_12 = {&copied_vertices[triangle->getFirstVertexId()-1], &copied_vertices[triangle->getSecondVertexId()-1]};
@@ -653,12 +649,12 @@ void Scene::clip(vector<Vec4> &copied_vertices) {
 					Line *line = new Line;
 					if(tl<1) {
 						end_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,lines[k].starting_point->t + dt*tl,lines[k].ending_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*tl, lines[k].starting_point->y + dy*tl,lines[k].starting_point->z + dz*tl,lines[k].starting_point->t + dt*tl,lines[k].starting_point->colorId);
 						line->ending_point = new_vertice;
 					}
 					if(te > 0) {
 						start_flag = false;
-						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,lines[k].starting_point->t + dt*te,lines[k].starting_point->colorId);
+						Vec4 *new_vertice = new Vec4(lines[k].starting_point->x + dx*te, lines[k].starting_point->y + dy*te,lines[k].starting_point->z + dz*te,lines[k].starting_point->t + dt*te,lines[k].ending_point->colorId);
 						line->starting_point = new_vertice;
 					}
 					if(end_flag) {
@@ -681,7 +677,7 @@ void Scene::clip(vector<Vec4> &copied_vertices) {
 							line->starting_point = &(copied_vertices[triangle->getFirstVertexId()-1]);
 						}
 					}
-
+					if(line->starting_point->t < 0.0000001 ||line->ending_point->t < 0.0000001) continue;
 					int size = copied_vertices.size();
 					copied_vertices.push_back(*(line->starting_point));
 					triangle->clipped_starting_point_indexes.push_back(size);
