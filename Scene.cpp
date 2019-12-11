@@ -32,7 +32,7 @@ void Scene::forwardRenderingPipeline(Camera *camera)
 	Matrix4 projection_matrix = createProjectionMatrix(camera);
 	this->applyProjectionMatrix(copied_vertices,projection_matrix);
 	//vector<Line> lines = vector<Line>();
-	//this->clip(copied_vertices, vertex_visibility, lines);
+	this->clip(copied_vertices);
 	// in HERE, we NEED TO DO BACKFACE CULLING (if enabled)
 	if(this->cullingEnabled) {
 		this->doBackfaceCulling(copied_vertices);
@@ -54,7 +54,14 @@ void Scene::doBackfaceCulling(vector<Vec4> &copied_vertices) {
 		Model *current_model = models[i];
 		for(int j=0; j<current_model->numberOfTriangles; j++) {
 			Triangle *current_triangle = &(current_model->triangles[j]);
-			vector<Line*> lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
+			vector<Line*> lines;
+			if(current_model->type == 0) {
+				// Clipping mode enabled.
+				lines = this->getClippedLinesOfTriangle(current_triangle, copied_vertices);
+			} else {
+				lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
+			}
+			if(lines.size() < 3) continue;
 			Vec3 normal = this->calculateNormal(lines);
 			Vec4 *point_on_triangle = lines[0]->ending_point;
 			Vec3 vec3_point_on_triangle = Vec3(point_on_triangle->x, point_on_triangle->y, point_on_triangle->z, -1);
@@ -143,11 +150,16 @@ vector<Vec3> Scene::getLineEquations(vector<Line*> lines) {
 
 void Scene::applyMidPointAlgorithm(vector<Vec4> &copied_vertices, Model* current_model) {
 	for(int j=0; j<current_model->numberOfTriangles; j++) {
-		Triangle *current_trianglep = &(current_model->triangles[j]);
-		if(current_trianglep->isCulled) continue;
-		Triangle current_triangle = *current_trianglep;
-		vector<Line*> lines = this->getLinesOfTriangle(current_triangle, copied_vertices);
-		for(int k=0; k<3; k++) {
+		Triangle *current_triangle = &(current_model->triangles[j]);
+		if(current_triangle->isCulled) continue;
+		vector<Line*> lines = vector<Line*>();
+		if(current_model->type == 0) {
+			// Clipping mode enabled.
+			lines = this->getClippedLinesOfTriangle(current_triangle, copied_vertices);
+		} else {
+			lines = this->getLinesOfTriangle(*current_triangle, copied_vertices);
+		}
+		for(int k=0; k<lines.size(); k++) {
 			double slope = calculateSlope(lines[k]->starting_point, lines[k]->ending_point);
 			bool isReflected = false;
 			if(!this->isStandardLine(lines[k])) this->swapLinePoints(lines[k]);
@@ -313,12 +325,14 @@ void Scene::midPointSwapped(Line *line, bool isReflected) {
 }
 
 void Scene::drawStandard(int x, int y, Color color) {
-	(this->image)[x][y] = color;
+	if(x < this->cameras[0]->horRes && y < this->cameras[0]->verRes)
+		(this->image)[x][y] = color;
 }
 
 void Scene::drawReflected(int x, int y, int reflection_coefficient, Color color) {
 	int x_to_draw = x - 2 * abs(reflection_coefficient-x);
-	(this->image)[x_to_draw][y] = color;
+	if(x_to_draw < this->cameras[0]->horRes && y < this->cameras[0]->verRes)
+		(this->image)[x_to_draw][y] = color;
 }
 
 double Scene::calculateSlope(Vec4 *starting_point, Vec4 *ending_point) {
@@ -346,6 +360,17 @@ vector<Line*> Scene::getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_
 	result.push_back(line12);
 	result.push_back(line23);
 	result.push_back(line31);
+	return result;
+}
+
+vector<Line*> Scene::getClippedLinesOfTriangle(Triangle *triangle, vector<Vec4> &copied_vertices) {
+	vector<Line*> result;
+	for(int i=0; i<triangle->clipped_starting_point_indexes.size(); i++) {
+		Line *new_line = new Line;
+		new_line->starting_point = &copied_vertices[triangle->clipped_starting_point_indexes[i]];
+		new_line->ending_point = &copied_vertices[triangle->clipped_ending_point_indexes[i]];
+		result.push_back(new_line);
+	}
 	return result;
 }
 
@@ -590,7 +615,7 @@ void Scene::applyProjectionMatrix(vector<Vec4> &copied_vertices,Matrix4 projecti
 	}
 }
 
-void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &linesVector) {
+void Scene::clip(vector<Vec4> &copied_vertices) {
 	for(int i=0; i<this->models.size(); i++) {
 		Model *model = this->models[i];
 		for(int j=0; j<model->numberOfTriangles; j++) {
@@ -657,7 +682,12 @@ void Scene::clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility,
 						}
 					}
 
-					linesVector.push_back(*line);
+					int size = copied_vertices.size();
+					copied_vertices.push_back(*(line->starting_point));
+					triangle->clipped_starting_point_indexes.push_back(size);
+					copied_vertices.push_back(*(line->ending_point));
+					triangle->clipped_ending_point_indexes.push_back(size+1);
+					
 				}
 			}
 		}

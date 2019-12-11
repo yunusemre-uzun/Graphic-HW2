@@ -1,4 +1,4 @@
 src = *.cpp
 
-all:
+rasterizer_cpp:
 	g++ $(src) -std=c++11 -g -o rasterizer

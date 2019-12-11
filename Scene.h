@@ -62,7 +62,7 @@ public:
 	Matrix4 createProjectionMatrix(Camera *);
 	void applyProjectionMatrix(vector<Vec4> &,Matrix4);
 	bool isVisible(int den, int num, double &te, double &tl);
-	void clip(vector<Vec4> &copied_vertices, vector<bool> &vertex_visibility, vector<Line> &lines);
+	void clip(vector<Vec4> &copied_vertices);
 	Matrix4 createViewportMatrix(Camera *camera);
 	void applyViewportTransformation(vector<Line> &lines, Matrix4 viewport_matrix);
 	void applyViewportTransformation(vector<Vec4> &copied_vertices, Matrix4 viewport_matrix, Camera* camera);
@@ -72,6 +72,7 @@ public:
 	Vec3 calculateVectorV(Vec3 u);
 	void applyMidPointAlgorithm(vector<Vec4> &copied_vertices,Model*);
 	vector<Line*> getLinesOfTriangle(Triangle triangle, vector<Vec4> &copied_vertices);
+	vector<Line*> getClippedLinesOfTriangle(Triangle *triangle, vector<Vec4> &copied_vertices);
 	void midPoint(Line *line);
 	double calculateSlope(Vec4 *starting_point, Vec4 *ending_point);
 	void midPointStandard(Line *line, bool isReflected);
